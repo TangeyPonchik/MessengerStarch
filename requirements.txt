@@ -6,3 +6,4 @@ pyjwt>=2.8
 python-multipart>=0.0.9
 requests>=2.31
 Pillow>=10.0
+pyinstaller>=6.0

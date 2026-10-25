@@ -17,10 +17,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 VERSION_FILE = os.path.join(ROOT, "version.txt")
-
-# ИЗМЕНЕНО: Путь к бэкапам на "Мой диск"
 BACKUP_DIR = r"C:\Users\chagi\Мой диск\Starch_Backups"
-
 REPO_NAME = "TangeyPonchik/MessengerStarch"
 
 SKIP_DIRS = {".git", "__pycache__", "venv", "env", ".idea", ".vscode", "build", "dist", "Starch_Backups"}
@@ -54,8 +51,6 @@ def update_version(new_ver):
 
 def make_backup(version):
     print("\n💾 Создание ZIP-бэкапа на 'Мой диск'...")
-    
-    # Создаём папку, если её нет
     if not os.path.exists(BACKUP_DIR):
         try:
             os.makedirs(BACKUP_DIR)
@@ -82,6 +77,55 @@ def make_backup(version):
         print(f"✅ Бэкап готов: {zip_path} ({size_mb:.2f} MB)")
     except Exception as e:
         print(f"❌ Ошибка при создании ZIP: {e}")
+
+def build_exe():
+    """Собирает launcher.py в один .exe через PyInstaller."""
+    print("\n🔨 Сборка Starch.exe через PyInstaller...")
+    
+    # Очищаем старые артефакты
+    if os.path.exists(os.path.join(ROOT, "build")):
+        shutil.rmtree(os.path.join(ROOT, "build"))
+    if os.path.exists(os.path.join(ROOT, "dist")):
+        shutil.rmtree(os.path.join(ROOT, "dist"))
+
+    # Команда для сборки (собираем launcher.py, а не client.py)
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm",
+        "--onefile",
+        "--windowed",  # Без консоли (для GUI)
+        "--name", "Starch",
+        "--collect-all", "customtkinter",
+        "launcher.py"
+    ]
+    
+    try:
+        subprocess.run(cmd, cwd=ROOT, check=True)
+        exe_path = os.path.join(ROOT, "dist", "Starch.exe")
+        if os.path.exists(exe_path):
+            print(f"✅ EXE собран: {exe_path}")
+            return exe_path
+        else:
+            print("❌ EXE не найден после сборки.")
+            return None
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Ошибка сборки PyInstaller: {e}")
+        return None
+
+def create_zip_with_exe(exe_path, version):
+    """Упаковывает exe в ZIP для релиза."""
+    if not exe_path:
+        return None
+    zip_name = f"Starch_v{version}_win64.zip"
+    zip_path = os.path.join(ROOT, zip_name)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(exe_path, os.path.basename(exe_path))
+        # Добавляем README, если есть
+        readme = os.path.join(ROOT, "README.md")
+        if os.path.exists(readme):
+            zipf.write(readme, "README.md")
+    print(f"✅ ZIP для релиза: {zip_path}")
+    return zip_path
 
 def run_cmd(cmd):
     try:
@@ -113,14 +157,21 @@ def main():
         print("Отмена.")
         return
 
-    # 1. Обновляем версию
     update_version(new_version)
 
-    # 2. Бэкап
     if ask("\n💾 Сделать ZIP-бэкап перед релизом? (y/n): ").lower() == "y":
         make_backup(new_version)
 
-    # 3. Git Commit & Push
+    # 🔨 СБОРКА EXE
+    exe_zip_path = None
+    if ask("\n🔨 Собрать Starch.exe для релиза? (y/n): ").lower() == "y":
+        exe_path = build_exe()
+        if exe_path:
+            exe_zip_path = create_zip_with_exe(exe_path, new_version)
+        else:
+            print("⚠ Сборка EXE не удалась, релиз будет без него.")
+
+    # Git Push
     print("\n🚀 Отправка на GitHub...")
     commit_msg = ask("Введите commit message (что нового): ")
     if not commit_msg:
@@ -136,13 +187,20 @@ def main():
 
     print("✅ Код отправлен на GitHub!")
 
-    # 4. GitHub Release
+    # GitHub Release
     if ask("\n🏷️ Создать релиз на GitHub через gh CLI? (y/n): ").lower() == "y":
         print("Тип релиза: 1 - Бета (Pre-release), 2 - Стабильный")
         rel_type = ask("Выбор (1/2): ")
         prerelease = "--prerelease" if rel_type == "1" else ""
         
+        # Формируем команду gh release create
         gh_cmd = f'gh release create v{new_version} --title "Starch v{new_version}" --notes "{commit_msg}" {prerelease}'
+        
+        # Если есть ZIP с EXE, прикрепляем его к релизу
+        if exe_zip_path and os.path.exists(exe_zip_path):
+            gh_cmd += f' "{exe_zip_path}"'
+            print(f"К релизу будет прикреплён файл: {exe_zip_path}")
+
         print(f"\nВыполняю: {gh_cmd}")
         if run_cmd(gh_cmd):
             print("✅ Релиз успешно создан!")

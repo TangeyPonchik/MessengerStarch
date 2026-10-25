@@ -4,9 +4,17 @@ database.py — SQLite-хранилище Starch.
 
 import sqlite3
 import threading
+import sys
+import os
 from datetime import datetime
 
-DB_PATH = "starch.db"
+# Определяем, где лежит .exe или .py
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DB_PATH = os.path.join(BASE_DIR, "starch.db")
 _lock = threading.Lock()
 
 LAZUR_USER_ID = 999
@@ -51,6 +59,7 @@ def init_db():
         """)
         c.commit()
 
+        # Виртуальный пользователь Lazur
         c.execute(
             "INSERT OR IGNORE INTO users (id, username, password_hash, created_at) "
             "VALUES (?, ?, ?, ?)",

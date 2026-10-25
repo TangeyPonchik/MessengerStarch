@@ -23,6 +23,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.spec
 
 # Виртуальные окружения
 venv/
@@ -49,7 +50,9 @@ starch_session.json
 Starch_Backups/
 *.zip
 *.rar
+*.tar
 *.tar.gz
+*.tgz
 
 # ==========================================
 # Редакторы и ОС

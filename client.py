@@ -8,6 +8,7 @@ import threading
 import queue
 import json
 import os
+import sys
 import time
 import requests
 import websocket
@@ -19,7 +20,14 @@ from protocol import (
 
 SERVER_HTTP = "http://127.0.0.1:8000"
 SERVER_WS = "ws://127.0.0.1:8000/ws"
-SESSION_FILE = "starch_session.json"
+
+# Определяем, где лежит .exe или .py
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SESSION_FILE = os.path.join(BASE_DIR, "starch_session.json")
 
 LAZUR_ID = 999
 LAZUR_NAME = "Lazur-lite"
@@ -583,6 +591,10 @@ class StarchApp(ctk.CTk):
 
     # ============ ВВОД ============
     def _по_enter(self, event):
+        if event.state & 0x0004:
+            return None
+        if event.state & 0x0008:
+            return None
         self._отправить()
         return "break"
 
