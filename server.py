@@ -6,8 +6,10 @@ server.py — Starch-сервер.
 import sys
 import io
 
-if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+# Безопасное переключение на UTF-8 (с проверкой на отсутствие консоли в .exe)
+if sys.stdout is not None and sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr is not None and sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 import asyncio
@@ -183,7 +185,6 @@ async def websocket_эндпоинт(ws: WebSocket, token: str):
                 вызов_бота = low.startswith("@lazur-lite") or low.startswith("@lazurlite")
 
                 if (вызов_бота or в_личке_с_lazur) and user_id != lazur.LAZUR_USER_ID:
-                    # ПЕРЕДАЁМ ИМЯ ПОЛЬЗОВАТЕЛЯ В БОТА
                     ответ = lazur.ответить(текст, user["username"], user_id, user["username"])
                     ответ_кому = user_id if в_личке_с_lazur else to_user
 

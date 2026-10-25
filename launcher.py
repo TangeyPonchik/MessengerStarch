@@ -7,8 +7,15 @@ import os
 import threading
 import time
 import asyncio
+import io
 
 import uvicorn
+
+# Безопасная настройка кодировки
+if sys.stdout is not None and sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr is not None and sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 # Фикс для Windows: uvicorn в фоновом потоке требует SelectorEventLoop
 if sys.platform == "win32":
