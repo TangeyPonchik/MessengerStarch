@@ -1,30 +1,27 @@
-"""
-database.py — SQLite-хранилище Starch.
-"""
-
 import sqlite3
 import threading
 import sys
 import os
 from datetime import datetime
 
-# Определяем, где лежит .exe или .py
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DB_PATH = os.path.join(BASE_DIR, "starch.db")
+MEDIA_DIR = os.path.join(BASE_DIR, "media")
 _lock = threading.Lock()
 
-LAZUR_USER_ID = 999
+if not os.path.exists(MEDIA_DIR):
+    os.makedirs(MEDIA_DIR)
 
+LAZUR_USER_ID = 999
 
 def _conn():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
     return c
-
 
 def init_db():
     with _lock:
@@ -40,7 +37,9 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             from_user INTEGER NOT NULL,
             to_user INTEGER,
-            text TEXT NOT NULL,
+            text TEXT,
+            media_path TEXT,
+            media_type TEXT,
             reply_to INTEGER,
             edited INTEGER DEFAULT 0,
             deleted INTEGER DEFAULT 0,
@@ -58,8 +57,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(from_user, to_user);
         """)
         c.commit()
-
-        # Виртуальный пользователь Lazur
         c.execute(
             "INSERT OR IGNORE INTO users (id, username, password_hash, created_at) "
             "VALUES (?, ?, ?, ?)",
@@ -67,7 +64,6 @@ def init_db():
         )
         c.commit()
         c.close()
-
 
 def register_user(username: str, password_hash: str):
     with _lock:
@@ -85,14 +81,12 @@ def register_user(username: str, password_hash: str):
             c.close()
             return None, "Логин уже занят"
 
-
 def get_user_by_username(username: str):
     with _lock:
         c = _conn()
         row = c.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         c.close()
         return dict(row) if row else None
-
 
 def get_user_by_id(uid: int):
     with _lock:
@@ -101,21 +95,19 @@ def get_user_by_id(uid: int):
         c.close()
         return dict(row) if row else None
 
-
-def save_message(from_user: int, to_user, text: str, reply_to=None) -> dict:
+def save_message(from_user: int, to_user, text: str = "", media_path: str = None, media_type: str = None, reply_to=None) -> dict:
     with _lock:
         c = _conn()
         cur = c.execute(
-            "INSERT INTO messages (from_user, to_user, text, reply_to, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (from_user, to_user, text, reply_to, datetime.now().isoformat())
+            "INSERT INTO messages (from_user, to_user, text, media_path, media_type, reply_to, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (from_user, to_user, text, media_path, media_type, reply_to, datetime.now().isoformat())
         )
         c.commit()
         mid = cur.lastrowid
         row = c.execute("SELECT * FROM messages WHERE id = ?", (mid,)).fetchone()
         c.close()
         return dict(row)
-
 
 def get_history(user_id: int, peer_id, limit: int = 100):
     with _lock:
@@ -150,81 +142,44 @@ def get_history(user_id: int, peer_id, limit: int = 100):
         c.close()
         return [dict(r) for r in reversed(rows)]
 
-
 def edit_message(message_id: int, user_id: int, new_text: str) -> bool:
     with _lock:
         c = _conn()
-        cur = c.execute(
-            "UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND from_user = ? AND deleted = 0",
-            (new_text, message_id, user_id)
-        )
+        cur = c.execute("UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND from_user = ? AND deleted = 0", (new_text, message_id, user_id))
         c.commit()
         affected = cur.rowcount
         c.close()
         return affected > 0
-
 
 def delete_message(message_id: int, user_id: int) -> bool:
     with _lock:
         c = _conn()
-        cur = c.execute(
-            "UPDATE messages SET deleted = 1 WHERE id = ? AND from_user = ?",
-            (message_id, user_id)
-        )
+        cur = c.execute("UPDATE messages SET deleted = 1 WHERE id = ? AND from_user = ?", (message_id, user_id))
         c.commit()
         affected = cur.rowcount
         c.close()
         return affected > 0
 
-
 def toggle_reaction(message_id: int, user_id: int, emoji: str):
     with _lock:
         c = _conn()
-        row = c.execute(
-            "SELECT id FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
-            (message_id, user_id, emoji)
-        ).fetchone()
+        row = c.execute("SELECT id FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?", (message_id, user_id, emoji)).fetchone()
         if row:
             c.execute("DELETE FROM reactions WHERE id = ?", (row["id"],))
             added = False
         else:
-            c.execute(
-                "INSERT INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
-                (message_id, user_id, emoji)
-            )
+            c.execute("INSERT INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)", (message_id, user_id, emoji))
             added = True
         c.commit()
         c.close()
         return added
 
-
 def get_reactions(message_id: int):
     with _lock:
         c = _conn()
-        rows = c.execute(
-            "SELECT emoji, COUNT(*) as cnt FROM reactions WHERE message_id = ? GROUP BY emoji",
-            (message_id,)
-        ).fetchall()
+        rows = c.execute("SELECT emoji, COUNT(*) as cnt FROM reactions WHERE message_id = ? GROUP BY emoji", (message_id,)).fetchall()
         c.close()
         return [dict(r) for r in rows]
-
-
-def get_all_users(except_id: int = None):
-    with _lock:
-        c = _conn()
-        if except_id:
-            rows = c.execute(
-                "SELECT id, username FROM users WHERE id != ? AND id != ?",
-                (except_id, LAZUR_USER_ID)
-            ).fetchall()
-        else:
-            rows = c.execute(
-                "SELECT id, username FROM users WHERE id != ?",
-                (LAZUR_USER_ID,)
-            ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
-
 
 def search_messages(user_id: int, peer_id, query: str, limit: int = 50):
     with _lock:

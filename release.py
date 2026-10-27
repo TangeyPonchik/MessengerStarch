@@ -35,6 +35,9 @@ def read_version():
         return f.read().strip()
 
 def bump_version(cur, тип):
+    if тип == "s":
+        return cur  # SKIP (версия не меняется)
+        
     major, minor, patch = map(int, cur.split("."))
     if тип == "m":
         major += 1; minor = 0; patch = 0
@@ -79,20 +82,23 @@ def make_backup(version):
         print(f"❌ Ошибка при создании ZIP: {e}")
 
 def build_exe():
-    """Собирает launcher.py в один .exe через PyInstaller."""
     print("\n🔨 Сборка Starch.exe через PyInstaller...")
     
-    # Очищаем старые артефакты
-    if os.path.exists(os.path.join(ROOT, "build")):
-        shutil.rmtree(os.path.join(ROOT, "build"))
-    if os.path.exists(os.path.join(ROOT, "dist")):
-        shutil.rmtree(os.path.join(ROOT, "dist"))
+    for folder in ["build", "dist"]:
+        path_to_clean = os.path.join(ROOT, folder)
+        if os.path.exists(path_to_clean):
+            try:
+                shutil.rmtree(path_to_clean)
+            except PermissionError:
+                print(f"❌ Не удалось удалить папку {folder}. Возможно, Starch.exe запущен!")
+                print("👉 Закрой программу (или сними процесс в Диспетчере задач) и попробуй снова.")
+                return None
 
-    # Команда для сборки (собираем launcher.py, а не client.py)
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--onefile",
+        # "--windowed",  # Закомментировано для отладки (чтобы видеть консоль)
         "--name", "Starch",
         "--collect-all", "customtkinter",
         "launcher.py"
@@ -112,14 +118,12 @@ def build_exe():
         return None
 
 def create_zip_with_exe(exe_path, version):
-    """Упаковывает exe в ZIP для релиза."""
     if not exe_path:
         return None
     zip_name = f"Starch_v{version}_win64.zip"
     zip_path = os.path.join(ROOT, zip_name)
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(exe_path, os.path.basename(exe_path))
-        # Добавляем README, если есть
         readme = os.path.join(ROOT, "README.md")
         if os.path.exists(readme):
             zipf.write(readme, "README.md")
@@ -142,21 +146,25 @@ def main():
     cur_version = read_version()
     print(f"Текущая версия: v{cur_version}")
     
-    print("Тип обновления: m - мажор, n - минор, f - фикс")
-    bump_type = ask("Тип (m/n/f): ").lower()
+    print("Тип обновления: m - мажор, n - минор, f - фикс, s - пропустить (SKIP)")
+    bump_type = ask("Тип (m/n/f/s): ").lower()
     
-    if bump_type not in ["m", "n", "f"]:
+    if bump_type not in ["m", "n", "f", "s"]:
         print("❌ Неверный тип")
         return
 
     new_version = bump_version(cur_version, bump_type)
-    print(f"\nНовая версия: v{new_version}")
+    if bump_type == "s":
+        print(f"\nВерсия останется прежней: v{new_version}")
+    else:
+        print(f"\nНовая версия: v{new_version}")
     
     if ask("Подтвердить? (y/n): ").lower() != "y":
         print("Отмена.")
         return
 
-    update_version(new_version)
+    if bump_type != "s":
+        update_version(new_version)
 
     if ask("\n💾 Сделать ZIP-бэкап перед релизом? (y/n): ").lower() == "y":
         make_backup(new_version)
@@ -192,10 +200,8 @@ def main():
         rel_type = ask("Выбор (1/2): ")
         prerelease = "--prerelease" if rel_type == "1" else ""
         
-        # Формируем команду gh release create
         gh_cmd = f'gh release create v{new_version} --title "Starch v{new_version}" --notes "{commit_msg}" {prerelease}'
         
-        # Если есть ZIP с EXE, прикрепляем его к релизу
         if exe_zip_path and os.path.exists(exe_zip_path):
             gh_cmd += f' "{exe_zip_path}"'
             print(f"К релизу будет прикреплён файл: {exe_zip_path}")

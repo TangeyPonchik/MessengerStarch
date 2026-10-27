@@ -1,7 +1,3 @@
-"""
-protocol.py — единый формат сообщений Starch.
-"""
-
 import json
 from datetime import datetime
 
@@ -17,15 +13,20 @@ PING = "ping"
 HISTORY = "history"
 AUTH_OK = "auth_ok"
 AUTH_ERR = "auth_err"
-FILE = "file"
 SEARCH = "search"
 
+# Новые типы для медиа
+IMAGE = "image"
+VOICE = "voice"
+CALL_OFFER = "call_offer"
+CALL_ANSWER = "call_answer"
+CALL_ICE = "call_ice"
+CALL_END = "call_end"
 
 def pack(тип: str, **поля) -> str:
     данные = {"тип": тип, "время": datetime.now().strftime("%H:%M")}
     данные.update(поля)
     return json.dumps(данные, ensure_ascii=False)
-
 
 def unpack(строка: str) -> dict:
     try:
