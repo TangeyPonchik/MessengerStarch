@@ -93,7 +93,6 @@ def build_exe():
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--onefile",
-        "--windowed",  # Без консоли (для GUI)
         "--name", "Starch",
         "--collect-all", "customtkinter",
         "launcher.py"
